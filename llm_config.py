@@ -35,7 +35,7 @@ def groq_create_message(client, model, messages, max_tokens):
 
 # !!!!! ********************* CHOOSE YOUR MODEL ********************* !!!!!
 # Choose LLM Model
-MY_MODEL = "llm_model_1"
+MY_MODEL = "llm_model_3"
 
 # ************************* CLAUDE ********************************
 # pricing - https://www.anthropic.com/pricing#anthropic-api
