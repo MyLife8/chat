@@ -4,109 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Application</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <style>
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 80px;
-        }
-        .header h2 {
-            margin: 0;
-        }
-        #delete-data-btn {
-            margin-left: auto;
-        }
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            height: 100vh;
-        }
-        .column {
-            padding: 20px;
-            box-sizing: border-box;
-            overflow-y: auto;
-        }
-        .left-column {
-            flex: 2;
-            border-right: 1px solid #ccc;
-            display: flex;
-            flex-direction: column;
-        }
-        .right-column {
-            flex: 1;
-        }
-        #chat-form {
-            padding: 10px 0;
-            display: flex;
-        }
-        #question {
-            flex-grow: 1;
-            padding: 5px;
-            resize: none; /* Prevents manual resizing */
-        }
-        #chat-history {
-            flex-grow: 1;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-        }
-        .message {
-            margin-bottom: 10px;
-            padding: 5px;
-            border-radius: 5px;
-        }
-        .user {
-            background-color: #e6f3ff;
-            align-self: flex-end;
-        }
-        .assistant {
-            background-color: #f0f0f0;
-            align-self: flex-start;
-        }
-        .token-usage {
-            font-size: 0.8em;
-            color: #888;
-            margin-top: 5px;
-        }
-        #conversation-list {
-            list-style-type: none;
-            padding: 0;
-        }
-        #conversation-list li {
-            cursor: pointer;
-            padding: 5px;
-            margin-bottom: 5px;
-            background-color: #f0f0f0;
-            border-radius: 3px;
-        }
-        #conversation-list li:hover {
-            background-color: #e0e0e0;
-        }
-        #new-conversation-btn {
-            margin-left: 10px;
-        }
-        .spinner {
-            display: none;
-            width: 50px;
-            height: 50px;
-            border: 3px solid rgba(0,0,0,.3);
-            border-radius: 50%;
-            border-top-color: #007bff;
-            animation: spin 1s ease-in-out infinite;
-            margin: 20px auto;
-        }
-        #logout-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        /* Your existing CSS styles here */
     </style>
 </head>
 <body>
@@ -125,7 +24,7 @@
     </div>
     <div class="column right-column">
         <div class="llm_info">
-            <p>LLM Model: <span id="model-info"></span></p>
+            <p>LLM Model: <span id="model-info">{{ client_class_name }}'s {{ model_name }} model</span></p>
         </div>
         <div class="header">
             <h2>Chat History</h2>
@@ -165,6 +64,9 @@
             async function loadConversations() {
                 try {
                     const response = await fetch('/get_conversations');
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
                     const conversations = await response.json();
                     elements.conversationList.innerHTML = '';
                     conversations.forEach(conv => {
@@ -175,6 +77,7 @@
                     });
                 } catch (error) {
                     console.error('Error loading conversations:', error);
+                    alert('Failed to load conversations. Please try again.');
                 }
             }
 
@@ -184,6 +87,9 @@
                 elements.convId.value = convId;
                 try {
                     const response = await fetch(`/get_conversation/${convId}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
                     const data = await response.json();
                     hideSpinner();
                     elements.conversationTitle.textContent = data.title;
@@ -195,6 +101,7 @@
                 } catch (error) {
                     hideSpinner();
                     console.error('Error loading conversation:', error);
+                    alert('Failed to load conversation. Please try again.');
                 }
             }
 
@@ -231,7 +138,24 @@
                             },
                             body: JSON.stringify({ initial_question: question }),
                         });
-                        data = await response.json();
+                    } else {
+                        // Continue existing conversation
+                        response = await fetch('/ask', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ conv_id: convId, question: question }),
+                        });
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    data = await response.json();
+
+                    if (!convId) {
                         currentConversationId = data.conv_id;
                         elements.convId.value = data.conv_id;
                         elements.conversationTitle.textContent = data.title;
@@ -250,15 +174,6 @@
                         updateTotalTokenUsage(data.token_usage.total_tokens);
                         loadConversations();
                     } else {
-                        // Continue existing conversation
-                        response = await fetch('/ask', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ conv_id: convId, question: question }),
-                        });
-                        data = await response.json();
                         elements.chatHistory.insertBefore(createMessageDiv({
                             id: data.user_message_id,
                             role: 'user',
@@ -276,7 +191,7 @@
                 } catch (error) {
                     hideSpinner();
                     console.error('Error:', error);
-                    alert('An error occurred while processing your request.');
+                    alert('An error occurred while processing your request. Please try again.');
                 }
 
                 elements.question.value = '';
@@ -295,7 +210,10 @@
                 if (confirm('Are you sure you want to delete all data? This action cannot be undone.')) {
                     showSpinner();
                     try {
-                        await fetch('/delete_all_data', { method: 'POST' });
+                        const response = await fetch('/delete_all_data', { method: 'POST' });
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
                         hideSpinner();
                         alert('All data has been deleted.');
                         loadConversations();
@@ -303,7 +221,7 @@
                     } catch (error) {
                         hideSpinner();
                         console.error('Error:', error);
-                        alert('An error occurred while deleting the data.');
+                        alert('An error occurred while deleting the data. Please try again.');
                     }
                 }
             }
@@ -332,14 +250,6 @@
             // Initialize
             loadConversations();
             startNewConversation();
-
-            // Fetch and display model info
-            fetch('/get_model_info')
-                .then(response => response.json())
-                .then(data => {
-                    elements.modelInfo.textContent = `${data.client_class_name}'s ${data.model_name} model`;
-                })
-                .catch(error => console.error('Error fetching model info:', error));
         });
     </script>
 </body>
