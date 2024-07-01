@@ -341,7 +341,7 @@
             elements.question.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    elements.chatForm.dispatchEvent(new Event('submit'));
+                    handleSubmit(new Event('submit'));
                 }
             });
             elements.deleteDataBtn.addEventListener('click', deleteAllData);
