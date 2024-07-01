@@ -4,7 +4,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from chatApp import create_tables
 import mysql.connector
 import configparser
-from llm_config import get_llm_config, create_client, create_message
+from llm_config import get_llm_config, create_client, create_message, get_llm_info
 from functools import wraps
 
 app = Flask(__name__)
@@ -83,7 +83,8 @@ def logout():
 @app.route('/')
 @login_required
 def combined_interface():
-    return render_template('combined.html')
+    client_class_name, model_name = get_llm_info()
+    return render_template('combined.html', client_class_name=client_class_name, model_name=model_name)
 
 @app.route('/new_conversation', methods=['POST'])
 @login_required
