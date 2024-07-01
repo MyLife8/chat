@@ -110,7 +110,7 @@
     </style>
 </head>
 <body>
-    <button id="logout-btn" onclick="location.href='/logout'">Logout</button>
+    <button id="logout-btn">Logout</button>
     <div class="column left-column">
         <h1 id="conversation-title">Chat Application</h1>
         <div id="token-usage">Total Tokens Used: 0</div>
@@ -120,12 +120,12 @@
             <button type="submit">Send</button>
             <button type="button" id="new-conversation-btn">New Chat</button>
         </form>
-    <div class="spinner" id="loading-spinner"></div>
-    <div id="chat-history"></div>
+        <div class="spinner" id="loading-spinner"></div>
+        <div id="chat-history"></div>
     </div>
     <div class="column right-column">
         <div class="llm_info">
-            <p>LLM Model: {{ client_class_name }}'s {{ model_name }} model</p>
+            <p>LLM Model: <span id="model-info"></span></p>
         </div>
         <div class="header">
             <h2>Chat History</h2>
@@ -135,218 +135,212 @@
     </div>
 
     <script>
-        let totalTokens = 0;
-        let currentConversationId = null;
+        document.addEventListener('DOMContentLoaded', () => {
+            let totalTokens = 0;
+            let currentConversationId = null;
 
-        function showSpinner() {
-            $('#loading-spinner').show();
-        }
+            const elements = {
+                logoutBtn: document.getElementById('logout-btn'),
+                chatForm: document.getElementById('chat-form'),
+                convId: document.getElementById('conv-id'),
+                question: document.getElementById('question'),
+                conversationTitle: document.getElementById('conversation-title'),
+                chatHistory: document.getElementById('chat-history'),
+                tokenUsage: document.getElementById('token-usage'),
+                loadingSpinner: document.getElementById('loading-spinner'),
+                newConversationBtn: document.getElementById('new-conversation-btn'),
+                deleteDataBtn: document.getElementById('delete-data-btn'),
+                conversationList: document.getElementById('conversation-list'),
+                modelInfo: document.getElementById('model-info')
+            };
 
-        function hideSpinner() {
-            $('#loading-spinner').hide();
-        }
+            function showSpinner() {
+                elements.loadingSpinner.style.display = 'block';
+            }
 
-        window.onload = function() {
-            loadConversations();
-            startNewConversation(); // Initialize with a new conversation
-        };
+            function hideSpinner() {
+                elements.loadingSpinner.style.display = 'none';
+            }
 
-        function loadConversations() {
-            fetch('/get_conversations')
-                .then(response => response.json())
-                .then(conversations => {
-                    const list = document.getElementById('conversation-list');
-                    list.innerHTML = '';
+            async function loadConversations() {
+                try {
+                    const response = await fetch('/get_conversations');
+                    const conversations = await response.json();
+                    elements.conversationList.innerHTML = '';
                     conversations.forEach(conv => {
                         const li = document.createElement('li');
                         li.textContent = conv.name;
                         li.onclick = () => loadConversation(conv.id);
-                        list.appendChild(li);
+                        elements.conversationList.appendChild(li);
                     });
-                });
-        }
-
-        function loadConversation(convId) {
-            showSpinner();
-            currentConversationId = convId;
-            $('#conv-id').val(convId);
-            $.get(`/get_conversation/${convId}`, function(data) {
-                hideSpinner();
-                $('#conversation-title').text(data.title);
-                const chatHistory = $('#chat-history').empty();
-
-                data.messages.forEach(function(message) {
-                    chatHistory.append(createMessageDiv(message));
-                });
-
-                updateTotalTokenUsage(data.token_usage.total_tokens, true);
-            });
-        }
-
-        function createMessageDiv(message) {
-            const messageDiv = $('<div></div>')
-                .addClass(`message ${message.role}`)
-                .attr('data-id', message.id);
-
-            messageDiv.html(`<strong>${message.role.charAt(0).toUpperCase() + message.role.slice(1)}:</strong> ${message.content}`);
-
-            // Add token usage if present
-            if (message.token_usage) {
-                const tokenUsageDiv = $('<div></div>')
-                    .addClass('token-usage')
-                    .text(message.token_usage);
-                messageDiv.append(tokenUsageDiv);
+                } catch (error) {
+                    console.error('Error loading conversations:', error);
+                }
             }
 
-            // Add a small display of the message ID (for debugging purposes)
-            const idDisplay = $('<small></small>')
-                .addClass('id-display')
-                .text(`(ID: ${message.id})`)
-                .css({
-                    'display': 'block',
-                    'color': '#999',
-                    'font-size': '0.8em'
-                });
-            messageDiv.append(idDisplay);
+            async function loadConversation(convId) {
+                showSpinner();
+                currentConversationId = convId;
+                elements.convId.value = convId;
+                try {
+                    const response = await fetch(`/get_conversation/${convId}`);
+                    const data = await response.json();
+                    hideSpinner();
+                    elements.conversationTitle.textContent = data.title;
+                    elements.chatHistory.innerHTML = '';
+                    data.messages.forEach(message => {
+                        elements.chatHistory.appendChild(createMessageDiv(message));
+                    });
+                    updateTotalTokenUsage(data.token_usage.total_tokens, true);
+                } catch (error) {
+                    hideSpinner();
+                    console.error('Error loading conversation:', error);
+                }
+            }
 
-            return messageDiv;
-        }
+            function createMessageDiv(message) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message', message.role);
+                messageDiv.dataset.id = message.id;
 
-        $('#chat-form').submit(function(e) {
-            e.preventDefault();
-            const question = $('#question').val().trim();
-            if (!question) return;
+                messageDiv.innerHTML = `
+                    <strong>${message.role.charAt(0).toUpperCase() + message.role.slice(1)}:</strong> ${message.content}
+                    ${message.token_usage ? `<div class="token-usage">${message.token_usage}</div>` : ''}
+                    <small class="id-display">(ID: ${message.id})</small>
+                `;
 
-            const convId = $('#conv-id').val();
-            showSpinner();
+                return messageDiv;
+            }
 
-            if (!convId) {
-                // Start a new conversation
-                $.ajax({
-                    url: '/new_conversation',
-                    method: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ initial_question: question }),
-                    success: function(data) {
-                        hideSpinner();
+            async function handleSubmit(event) {
+                event.preventDefault();
+                const question = elements.question.value.trim();
+                if (!question) return;
+
+                const convId = elements.convId.value;
+                showSpinner();
+
+                try {
+                    let response, data;
+                    if (!convId) {
+                        // Start a new conversation
+                        response = await fetch('/new_conversation', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ initial_question: question }),
+                        });
+                        data = await response.json();
                         currentConversationId = data.conv_id;
-                        $('#conv-id').val(data.conv_id);
-                        $('#conversation-title').text(data.title);
-                        const chatHistory = $('#chat-history').empty();
-
-                        // Add assistant response
-                        chatHistory.append(createMessageDiv({
+                        elements.convId.value = data.conv_id;
+                        elements.conversationTitle.textContent = data.title;
+                        elements.chatHistory.innerHTML = '';
+                        elements.chatHistory.appendChild(createMessageDiv({
                             id: data.assistant_message_id,
                             role: 'assistant',
                             content: data.initial_answer,
                             token_usage: `Input ${data.token_usage.prompt_tokens}, Output ${data.token_usage.completion_tokens}, Total ${data.token_usage.total_tokens}`
                         }));
-
-                        // Add user question
-                        chatHistory.append(createMessageDiv({
+                        elements.chatHistory.appendChild(createMessageDiv({
                             id: data.user_message_id,
                             role: 'user',
                             content: question
                         }));
-
                         updateTotalTokenUsage(data.token_usage.total_tokens);
                         loadConversations();
-                    },
-                    error: function(jqXHR, textStatus, errorThrown) {
-                        hideSpinner();
-                        console.error('Error:', textStatus, errorThrown);
-                        alert('An error occurred while starting a new conversation.');
-                    }
-                });
-            } else {
-                // Continue existing conversation
-                $.ajax({
-                    url: '/ask',
-                    method: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ conv_id: convId, question: question }),
-                    success: function(data) {
-                        hideSpinner();
-                        const chatHistory = $('#chat-history');
-
-                        // Add user question
-                        chatHistory.prepend(createMessageDiv({
+                    } else {
+                        // Continue existing conversation
+                        response = await fetch('/ask', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ conv_id: convId, question: question }),
+                        });
+                        data = await response.json();
+                        elements.chatHistory.insertBefore(createMessageDiv({
                             id: data.user_message_id,
                             role: 'user',
                             content: question
-                        }));
-
-                        // Add assistant response
-                        chatHistory.prepend(createMessageDiv({
+                        }), elements.chatHistory.firstChild);
+                        elements.chatHistory.insertBefore(createMessageDiv({
                             id: data.assistant_message_id,
                             role: 'assistant',
                             content: data.response,
                             token_usage: `Input ${data.token_usage.input_tokens}, Output ${data.token_usage.output_tokens}, Total ${data.token_usage.total_tokens}`
-                        }));
-
+                        }), elements.chatHistory.firstChild);
                         updateTotalTokenUsage(data.token_usage.total_tokens);
-                    },
-                    error: function(jqXHR, textStatus, errorThrown) {
-                        hideSpinner();
-                        console.error('Error:', textStatus, errorThrown);
-                        alert('An error occurred while processing your request.');
                     }
-                });
+                    hideSpinner();
+                } catch (error) {
+                    hideSpinner();
+                    console.error('Error:', error);
+                    alert('An error occurred while processing your request.');
+                }
+
+                elements.question.value = '';
             }
-            $('#question').val('');
-        });
 
-        function startNewConversation() {
-            currentConversationId = null;
-            document.getElementById('conv-id').value = '';
-            document.getElementById('conversation-title').textContent = 'New Conversation';
-            document.getElementById('chat-history').innerHTML = '';
-            document.getElementById('token-usage').textContent = 'Total Tokens Used: 0';
-            totalTokens = 0;
-        };
-
-        // return enter key submit while use textarea for input box
-        document.getElementById('question').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault(); // Prevent default to avoid newline
-                document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+            function startNewConversation() {
+                currentConversationId = null;
+                elements.convId.value = '';
+                elements.conversationTitle.textContent = 'New Conversation';
+                elements.chatHistory.innerHTML = '';
+                elements.tokenUsage.textContent = 'Total Tokens Used: 0';
+                totalTokens = 0;
             }
-        });
 
-        // Function to delete all data with confirmation
-        document.getElementById('delete-data-btn').onclick = function() {
-            if (confirm('Are you sure you want to delete all data? This action cannot be undone.')) {
-                showSpinner();
-                $.ajax({
-                    url: '/delete_all_data',
-                    method: 'POST',
-                    success: function() {
+            async function deleteAllData() {
+                if (confirm('Are you sure you want to delete all data? This action cannot be undone.')) {
+                    showSpinner();
+                    try {
+                        await fetch('/delete_all_data', { method: 'POST' });
                         hideSpinner();
                         alert('All data has been deleted.');
                         loadConversations();
                         startNewConversation();
-                    },
-                    error: function(jqXHR, textStatus, errorThrown) {
+                    } catch (error) {
                         hideSpinner();
-                        console.error('Error:', textStatus, errorThrown);
+                        console.error('Error:', error);
                         alert('An error occurred while deleting the data.');
                     }
-                });
+                }
             }
-        };
 
-        // New Chat conversation click action
-        document.getElementById('new-conversation-btn').onclick = startNewConversation;
-
-        function updateTotalTokenUsage(usage, reset = false) {
-            if (reset) {
-                totalTokens = usage;
-            } else {
-                totalTokens += usage;
+            function updateTotalTokenUsage(usage, reset = false) {
+                if (reset) {
+                    totalTokens = usage;
+                } else {
+                    totalTokens += usage;
+                }
+                elements.tokenUsage.textContent = `Total Tokens Used: ${totalTokens}`;
             }
-            document.getElementById('token-usage').textContent = `Total Tokens Used: ${totalTokens}`;
-        }
 
+            // Event Listeners
+            elements.logoutBtn.addEventListener('click', () => location.href = '/logout');
+            elements.chatForm.addEventListener('submit', handleSubmit);
+            elements.question.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    elements.chatForm.dispatchEvent(new Event('submit'));
+                }
+            });
+            elements.deleteDataBtn.addEventListener('click', deleteAllData);
+            elements.newConversationBtn.addEventListener('click', startNewConversation);
+
+            // Initialize
+            loadConversations();
+            startNewConversation();
+
+            // Fetch and display model info
+            fetch('/get_model_info')
+                .then(response => response.json())
+                .then(data => {
+                    elements.modelInfo.textContent = `${data.client_class_name}'s ${data.model_name} model`;
+                })
+                .catch(error => console.error('Error fetching model info:', error));
+        });
     </script>
 </body>
 </html>
