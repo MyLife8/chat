@@ -4,7 +4,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from chatApp import create_tables
 import mysql.connector
 import configparser
-from llm_config import get_llm_config, create_client, create_message, get_llm_info
+from llm_config import get_llm_config, create_client, create_message
 from functools import wraps
 
 app = Flask(__name__)
@@ -20,7 +20,7 @@ app.secret_key = config.get('SECRET_KEYS', 'secret_key').strip('"')
 app_pass = config.get('SECRET_KEYS', 'app_password').strip('"')
 
 # Password protection settings
-PASSWORD_PROTECTION_ENABLED = False  # Set to False to disable password protection
+PASSWORD_PROTECTION_ENABLED = True  # Set to False to disable password protection
 PASSWORD = app_pass  # Change this to your desired password
 
 # Get LLM configuration
@@ -83,8 +83,7 @@ def logout():
 @app.route('/')
 @login_required
 def combined_interface():
-    client_class_name, model_name = get_llm_info()
-    return render_template('combined.html', client_class_name=client_class_name, model_name=model_name)
+    return render_template('combined.html')
 
 @app.route('/new_conversation', methods=['POST'])
 @login_required
@@ -121,7 +120,7 @@ def new_conversation():
         client,
         model,
         [{"role": "user", "content": initial_question}],
-        max_tokens=1000
+        max_tokens=300
     )
    
     # Save the answer in messages
@@ -152,63 +151,53 @@ def ask():
     data = request.json
     conv_id = data['conv_id']
     question = data['question']
-    
-    # logging.info(f"Received question: {question} for conversation ID: {conv_id}")
-    
+   
     conn = db_pool.get_connection()
     cursor = conn.cursor()
-    
+   
     try:
         # Save user message
         cursor.execute("INSERT INTO messages (conversation_id, role, content) VALUES (%s, %s, %s)",
                        (conv_id, 'user', question))
         user_message_id = cursor.lastrowid
         conn.commit()
-        # logging.info("User message saved to database")
-        
+       
         # Load conversation history
         cursor.execute("SELECT role, content FROM messages WHERE conversation_id = %s", (conv_id,))
         conversation = cursor.fetchall()
-        
+       
         # Format messages for the LLM
         formatted_messages = [{"role": role, "content": content} for role, content in conversation]
         
-        # Get response from LLM
-        # logging.info("Sending request to LLM...")
-        response = client.messages.create(
-            model=model,
-            messages=formatted_messages,
-            max_tokens=1000,
-            system="You are a helpful assistant. Provide concise and accurate responses based on the conversation history."
+        # Get response from LLM using create_message function
+        response = create_message(
+            client,
+            model,
+            formatted_messages,
+            max_tokens=300
         )
-        
-        llm_response = response.content[0].text
-        # logging.info(f"Received response from LLM: {llm_response}")
+       
+        llm_response = response['content']
         
         # Save assistant message
         cursor.execute("INSERT INTO messages (conversation_id, role, content) VALUES (%s, %s, %s)",
                        (conv_id, 'assistant', llm_response))
         assistant_message_id = cursor.lastrowid
         conn.commit()
-        # logging.info("Assistant message saved to database")
-        
+       
         # Prepare token usage data
-        token_usage = {
-            'input_tokens': response.usage.input_tokens,
-            'output_tokens': response.usage.output_tokens,
-            'total_tokens': response.usage.input_tokens + response.usage.output_tokens
-        }
-        
+        token_usage = response['usage']
+       
         return jsonify({
             'response': llm_response,
             'user_message_id': user_message_id,
             'assistant_message_id': assistant_message_id,
             'token_usage': token_usage
         })
-    
+   
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
+   
     finally:
         cursor.close()
         conn.close()
@@ -262,54 +251,6 @@ def delete_all_data():
         return jsonify({
             'status': 'success',
             'message': f'Successfully deleted {messages_deleted} messages and {conversations_deleted} conversations',
-        }), 200
-    except mysql.connector.Error as e:
-        if 'conn' in locals() and conn.in_transaction:
-            conn.rollback()
-        return jsonify({
-            'status': 'error',
-            'message': f'Database error: {str(e)}',
-            'error_code': e.errno if hasattr(e, 'errno') else None,
-            'sqlstate': e.sqlstate if hasattr(e, 'sqlstate') else None
-        }), 500
-    except Exception as e:
-        if 'conn' in locals() and conn.in_transaction:
-            conn.rollback()
-        return jsonify({
-            'status': 'error',
-            'message': f'Unexpected error: {str(e)}'
-        }), 500
-    finally:
-        if 'cursor' in locals() and cursor is not None:
-            cursor.close()
-        if 'conn' in locals() and conn is not None:
-            conn.close()
-
-@app.route('/delete_conversation/<int:conv_id>', methods=['POST'])
-@login_required
-def delete_conversation(conv_id):
-    print("conv_id: ", conv_id)
-    try:
-        conn = db_pool.get_connection()
-        cursor = conn.cursor()
-        
-        conn.start_transaction()
-        
-        # Construct and print the SQL query for deleting messages
-        delete_messages_sql = f"DELETE FROM messages WHERE conversation_id = {conv_id}"
-        # print("Executing SQL:", delete_messages_sql)
-        cursor.execute(delete_messages_sql)
-        
-        # Construct and print the SQL query for deleting conversations
-        delete_conversations_sql = f"DELETE FROM conversations WHERE id = {conv_id}"
-        # print("Executing SQL:", delete_conversations_sql)
-        cursor.execute(delete_conversations_sql)
-        
-        conn.commit()
-        
-        return jsonify({
-            'status': 'success',
-            'message': f'Successfully deleted conversation',
         }), 200
     except mysql.connector.Error as e:
         if 'conn' in locals() and conn.in_transaction:
