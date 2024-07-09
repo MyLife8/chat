@@ -35,7 +35,7 @@ def groq_create_message(client, model, messages, max_tokens):
 
 # !!!!! ********************* CHOOSE YOUR MODEL ********************* !!!!!
 # Choose LLM Model
-MY_MODEL = "llm_model_3"
+MY_MODEL = "llm_model_4"
 
 # ************************* CLAUDE ********************************
 # pricing - https://www.anthropic.com/pricing#anthropic-api
@@ -46,7 +46,8 @@ MY_MODEL = "llm_model_3"
 # 200K context window, Input $3 / MTok, Output $15 / MTok
 # SMART
 # model="claude-3-5-sonnet-20240620"
-# GROQ, model 3, is totally FREE
+# GROQ, model 3, is totally FREE. And new 7/9/2024 model 4. supposedly
+# gemma2-9b is between Sonet 3.5 and Gpt4.
 # ********************** END - CLAUDE *****************************
 
 LLM_CONFIGS = {
@@ -64,6 +65,12 @@ LLM_CONFIGS = {
     },
     "llm_model_3": {
         "model": "mixtral-8x7b-32768",
+        "api_key": "groq_api_key",
+        "client_class": Groq,
+        "create_message": groq_create_message
+    },
+    "llm_model_4": {
+        "model": "gemma2-9b-it",
         "api_key": "groq_api_key",
         "client_class": Groq,
         "create_message": groq_create_message

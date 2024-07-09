@@ -16,8 +16,8 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 
 # Get the Secret Key from the 'SECRET_KEY' section of the 'config.ini' file
-app.secret_key = config.get('SECRET_KEYS', 'secret_key').strip('"')
-app_pass = config.get('SECRET_KEYS', 'app_password').strip('"')
+app.secret_key = config.get('SECRET_KEYS', 'secret_key')
+app_pass = config.get('SECRET_KEYS', 'app_password')
 
 # Password protection settings
 PASSWORD_PROTECTION_ENABLED = True  # Set to False to disable password protection
@@ -29,7 +29,7 @@ model = llm_config['model']
 my_api_key = llm_config['api_key']
 
 # Get the API key from the 'API_CREDENTIALS' section of the 'config.ini' file
-api_key = config.get('API_CREDENTIALS', my_api_key).strip('"')
+api_key = config.get('API_CREDENTIALS', my_api_key)
 # Initialize client
 client = create_client(api_key)
 
